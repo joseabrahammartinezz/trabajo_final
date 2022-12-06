@@ -1,0 +1,51 @@
+      pipeline{
+    agent none
+     parameters{
+         string defaultValue: 'debian', description: 'Nombre del Nodo  del ambiente QA,   ', name: 'LABEL_QA_NODE', trim: false
+         string defaultValue: 'produccion', description: 'Nombre del Nodo  del ambiente PROD,   ', name: 'LABEL_PROD_NODE', trim: false
+         string defaultValue: 'debian', description: 'Nombre del Nodo  del ambiente MASTER,   ', name: 'LABEL_MASTER_NODE', trim: false
+
+     }
+    environment{
+        QA_NODE="${params.LABEL_QA_NODE}"
+        PROD_NODE="${params.LABEL_PROD_NODE}"
+        MASTER_NODE="${params.LABEL_MASTER_NODE}"
+    }
+    stages{
+        stage("Clonacion"){
+            agent { label MASTER_NODE }
+            steps{
+                git branch: 'master', url: 'https://github.com/joseabrahammartinezz/backend.git'
+                sh "echo Backend Clonado!"
+            }
+        }
+        stage("Imagen Docker"){
+            agent { label MASTER_NODE }
+            steps{
+                sh "docker build -t backend:v1 ."
+                sh "docker save -o backend.tar backend:v1"
+                stash name: "backend-stash", includes: "backend.tar"
+                archiveArtifacts 'backend.tar'
+            }
+        }
+        stage("Despliegue en QA"){
+            agent { label QA_NODE }
+            steps{
+                unstash "backend-stash"
+                sh "docker load -i backend.tar"
+                sh "docker rm backend -f || true"
+                sh "docker run -p 8000:8000 backend:v1"
+            }
+        }
+        stage("Despliegue en Produccion"){
+            agent { label MASTER_NODE}
+            steps {
+                unstash "backend-stash"
+                sh "docker load -i backend.tar"
+                sh "docker rm backend -f || true"
+                sh "docker run -p 8000:8000 backend:v1"
+            }
+            
+        }
+    }
+}
